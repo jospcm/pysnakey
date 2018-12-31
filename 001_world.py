@@ -2,7 +2,6 @@ import sys
 import pygame
 import random
 
-
 # CONFIGURATIONS
 SPACE_DIMENSIONS = (500, 500)
 SPACE_QUANTUM = 50
@@ -34,7 +33,7 @@ class KeyPress():
 
     def set(self, value):
         if not KeyPress.is_valid(value):
-            raise ValueError("Invalid value provided for keypress" % str(value))
+            raise ValueError("Invalid value provided for keypress: {}".format(str(value)))
         self.value = value 
 
     def __eq__(self, other):
@@ -57,8 +56,13 @@ class KeyPress():
         return ""
 
 # ----------------------------------------------------
-
-
+# class Screen():
+#     """
+#     UI representation of our game
+#     """
+    
+#     def __init__(self, space):
+#         pass
 
 # ----------------------------------------------------
 class Snake():
@@ -93,14 +97,22 @@ class SnakeGame():
     """
     Holds the logic of the game. Essentially controls how the parts fit together.
 
-    ... or should do so, at least.
+    This assumes that any entity occupies a single pixel on the screen, and leaves the overhead of the rendering
+    to the responsible module. Or it will do that, at some point.
+    
     """
     POSITIONAL_AXES = ( (KeyPress(KeyPress.LEFT), KeyPress(KeyPress.RIGHT)), (KeyPress(KeyPress.UP), KeyPress(KeyPress.DOWN)) )
+
+    # Colours
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
     RED = (255, 0, 0)
 
     def __init__(self):
+        # A snapshot of our snakey universe.
+        self._space = self._quantize_space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)
+        
+        # 
         self._snake = Snake()
         self._edible = Edible()
 
@@ -109,28 +121,44 @@ class SnakeGame():
 
         # Engine specific code
         pygame.init()
-        self._screen = pygame.display.set_mode(SPACE_DIMENSIONS)
         self._timer = pygame.time.Clock()
         pygame.time.set_timer(GAME_QUANTUM_EVENT, GAME_QUANTUM)
 
         # Indicate when to quit
         self._keep_running = True
 
+        # DRAWING PART, TO BE REFACTORED!
+        self._screen = pygame.display.set_mode(SPACE_DIMENSIONS)
+
     def update(self):
-        """ Updates the internal state of the game """
+        """ 
+        Updates the internal state of the game 
+        """
         print ("game tick!")
     
         self._snake.update()
         self._edible.update()
 
     def draw(self):
-        """ Draws the game to the default output """
+        """ 
+        Draws the game to the default output 
+        """
         self._screen.fill(self.RED)
         self._draw_borders()
         pygame.display.flip()
 
+    def _quantize_space(self, dimensions, quantum, border_width = 0):
+        # usable axis quanta => dimension[axis] - (border_width  * 2) / quantum
+        def get_range(axis):
+            return (axis - (border_width  * 2)) // quantum 
+        
+        space_range = get_range(dimensions[0]), get_range(dimensions[1])
+        return [[0] * (space_range[0]), [0] * (space_range[1])]
+
     def _draw_borders(self):
-        """ Borders are nothing but a hollow rectangular shape encompassing the screen. """
+        """ 
+        Borders are nothing but a hollow rectangular shape encompassing the screen. 
+        """
         pygame.draw.rect(self._screen, self.BLACK, (0, 0, SPACE_DIMENSIONS[0], SPACE_DIMENSIONS[1]), SPACE_BORDER_WIDTH)
 
     def _is_movement_valid(self, current_dir, proposed_dir):
@@ -159,7 +187,6 @@ class SnakeGame():
             return KeyPress.DOWN
         else:
             return None
-
 
     def run(self):
         # First run:
