@@ -59,7 +59,6 @@ class KeyPress():
 # ----------------------------------------------------
 class Element():
     def __init__(self, representation):
-        print("called")
         if representation is None:
             raise ValueError("Invalid argument provided for the element representation")
         self._repr = representation
@@ -80,16 +79,20 @@ class Space():
     
     def get_random_unoccupied_position(self):
         free = []
-        for row in self._space:
-            for elm in row:
-                if not isinstance(elm, EmptyElement):
-                    free.append((x, y))
+        for y, row in enumerate(self._space):
+            for x, elm in enumerate(row):
+                if isinstance(elm, EmptyElement):
+                    free.append((x,y))
+        return random.choice(free)
 
-        pass
 
     def occupy(self, position, value):
         x, y = position
         self._space[x][y] = value
+
+    def free(self, position):
+        x, y = position
+        self._space[x][y] = EmptyElement()
 
     def _quantize(self, dimensions, quantum, border_width):
         # usable axis quanta => dimension[axis] - (border_width  * 2) / quantum
@@ -97,7 +100,7 @@ class Space():
             return (axis - (border_width  * 2)) // quantum 
         
         space_range = get_range(dimensions[0]), get_range(dimensions[1])
-        return numpy.full(space_range, EmptyElement)
+        return numpy.full(space_range, EmptyElement())
 
     # Python magic
     # def __setitem__(self, key, value):
@@ -125,22 +128,23 @@ class Space():
 # ----------------------------------------------------
 class Snake():
     _position = []
-
-    def __init__(self):
-        pass
-
-    def grow(self):
+    def __init__(self, position = None):
+        if position is None:
+            raise ValueError("Invalid initial provided to the mighty snake. Cannot proceed.")
+        self._position = [position]
         pass
 
     def update(self, space):
-        #print("- update: Snake")
-        pass
+        for pos in self._position:
+            space.occupy(pos, self)
 
 # ----------------------------------------------------
 class Edible():
     _position = []
 
     def __init__(self, position = None):
+        if position is None:
+            raise ValueError("Invalid position provided to the delicious edible. Cannot proceed.")
         self._position = position
         pass
 
@@ -165,16 +169,15 @@ class SnakeGame():
     # TODO: DRAWING PART, TO BE REFACTORED!
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
-    RED = (255, 0, 0)
+    RED = (128, 0, 0)
+    GREEN = (0, 128, 0)
 
     def __init__(self):
         # A snapshot of our snakey universe.
-        self._space = Space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)
-        print(self._space)
-        
+        self._space = Space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)        
         # 
-        self._snake = Snake()
-        self._edible = Edible((2, 4)) #TODO: JPM testing
+        self._snake = Snake(self._space.get_random_unoccupied_position())
+        self._edible = Edible(self._space.get_random_unoccupied_position())
 
         # Movement
         self._direction = KeyPress(KeyPress.random_key())
@@ -194,8 +197,6 @@ class SnakeGame():
         """ 
         Updates the internal state of the game 
         """
-        print ("game tick!")
-    
         self._snake.update(self._space)
         self._edible.update(self._space)
 
@@ -206,16 +207,41 @@ class SnakeGame():
         self._screen.fill(self.WHITE)
         self._draw_borders()
 
-        # TODO: DRAWING PART, TO BE REFACTORED!
-        for row in self._space:
-            for elm in row:
-                print (elm)
+        # TODO: DRAWING PART, TO BE REFACTORED! 
+        self._draw_space(self._space)
         
         pygame.display.flip()
 
     def _draw_space(self, space):
+        """ 
+        # TODO: DRAWING PART, TO BE REFACTORED! 
+        # """
+        for y, row in enumerate(self._space):
+            # Take offset into account in this hack
+            for x, elm in enumerate(row):
+                if isinstance(elm, EmptyElement):
+                    position = self._translate_coords(x, y)
+                    pygame.draw.rect(self._screen, self.WHITE, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
 
-        pass
+                elif isinstance(elm, Edible):
+                    position = self._translate_coords(x, y)
+                    pygame.draw.rect(self._screen, self.RED, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
+
+                elif isinstance(elm, Snake):
+                    position = self._translate_coords(x, y)
+                    pygame.draw.rect(self._screen, self.GREEN, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
+
+                    # Shouldn't happen.
+                else:
+                    print ("- BAD: ({},{}) -> {}".format(x, y, elm))
+
+    # TODO: TO BE REFACTORED
+    def _translate_coords(self, x, y):
+        """ 
+        Translates our cartesian representation to the coordinate sytem understood by pygame
+        """
+        return SPACE_BORDER_WIDTH + (x * SPACE_QUANTUM), SPACE_BORDER_WIDTH + (y * SPACE_QUANTUM)
+
 
     def _draw_borders(self):
         """ 
@@ -265,6 +291,11 @@ class SnakeGame():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     self._keep_running = False
 
+                # TODO: JPM to remove this.
+                if (event.type == pygame.KEYDOWN and event.key == pygame.K_d):
+                    print ("DEBUG DEBUGDEBUGDEBUGDEBUG")
+                    self._edible = Edible(self._space.get_random_unoccupied_position())
+
                 # Tick
                 elif event.type == GAME_QUANTUM_EVENT:
                     self.update()
@@ -285,7 +316,8 @@ class SnakeGame():
                             print("+ direction:", str(proposed_direction))
                         else:
                             print ("Invalid direction passed: ", str(proposed_direction))
-                            
+
+        # Out of the loop.                    
         pygame.quit()
 
 
