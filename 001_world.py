@@ -1,6 +1,7 @@
 import sys
 import pygame
 import random
+import numpy
 
 # CONFIGURATIONS
 SPACE_DIMENSIONS = (500, 500)
@@ -56,13 +57,70 @@ class KeyPress():
         return ""
 
 # ----------------------------------------------------
-# class Screen():
-#     """
-#     UI representation of our game
-#     """
+class Element():
+    def __init__(self, representation):
+        print("called")
+        if representation is None:
+            raise ValueError("Invalid argument provided for the element representation")
+        self._repr = representation
+
+class EmptyElement(Element):
+    def __init__(self):
+        super(EmptyElement, self).__init__(0)
+        pass
+
+# ----------------------------------------------------
+class Space():
+    """
+    A representation of our snakey world
+    """
+    def __init__(self, dimensions, quantum, border_width = 0):
+        self._space = self._quantize(dimensions, quantum, border_width)
+        pass
     
-#     def __init__(self, space):
-#         pass
+    def get_random_unoccupied_position(self):
+        free = []
+        for row in self._space:
+            for elm in row:
+                if not isinstance(elm, EmptyElement):
+                    free.append((x, y))
+
+        pass
+
+    def occupy(self, position, value):
+        x, y = position
+        self._space[x][y] = value
+
+    def _quantize(self, dimensions, quantum, border_width):
+        # usable axis quanta => dimension[axis] - (border_width  * 2) / quantum
+        def get_range(axis):
+            return (axis - (border_width  * 2)) // quantum 
+        
+        space_range = get_range(dimensions[0]), get_range(dimensions[1])
+        return numpy.full(space_range, EmptyElement)
+
+    # Python magic
+    # def __setitem__(self, key, value):
+    #     try:
+    #         x, y = key
+    #         self._space[x][y] = value
+    #     except Exception as e:
+    #         # Bad.
+    #         raise ValueError("Cannot set space item. Invalid key provided. Expected: sequence with 2+ elements.")
+
+    # def __getitem__(self, key):
+    #     try:
+    #         x, y = key
+    #         return self._space[x][y]
+    #     except Exception as e:
+    #         # Bad.
+    #         raise ValueError("Cannot retrieve space item. Invalid key provided. Expected: sequence with 2+ elements.")
+
+    def __iter__(self):
+        return self._space.__iter__()
+
+    def __next__(self):
+        return self._space.__next__()
 
 # ----------------------------------------------------
 class Snake():
@@ -74,7 +132,7 @@ class Snake():
     def grow(self):
         pass
 
-    def update(self):
+    def update(self, space):
         #print("- update: Snake")
         pass
 
@@ -83,13 +141,14 @@ class Edible():
     _position = []
 
     def __init__(self, position = None):
+        self._position = position
         pass
 
-    def set_position(self, position):
-        print("Position given: ", position)
+    # def set_position(self, position):
+    #     print("Position given: ", position)
 
-    def update(self):
-        #print("- update: Edible")
+    def update(self, space):
+        space.occupy(self._position, self)
         pass
 
 # ----------------------------------------------------
@@ -103,18 +162,19 @@ class SnakeGame():
     """
     POSITIONAL_AXES = ( (KeyPress(KeyPress.LEFT), KeyPress(KeyPress.RIGHT)), (KeyPress(KeyPress.UP), KeyPress(KeyPress.DOWN)) )
 
-    # Colours
+    # TODO: DRAWING PART, TO BE REFACTORED!
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
     RED = (255, 0, 0)
 
     def __init__(self):
         # A snapshot of our snakey universe.
-        self._space = self._quantize_space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)
+        self._space = Space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)
+        print(self._space)
         
         # 
         self._snake = Snake()
-        self._edible = Edible()
+        self._edible = Edible((2, 4)) #TODO: JPM testing
 
         # Movement
         self._direction = KeyPress(KeyPress.random_key())
@@ -127,7 +187,7 @@ class SnakeGame():
         # Indicate when to quit
         self._keep_running = True
 
-        # DRAWING PART, TO BE REFACTORED!
+        # TODO: DRAWING PART, TO BE REFACTORED!
         self._screen = pygame.display.set_mode(SPACE_DIMENSIONS)
 
     def update(self):
@@ -136,24 +196,26 @@ class SnakeGame():
         """
         print ("game tick!")
     
-        self._snake.update()
-        self._edible.update()
+        self._snake.update(self._space)
+        self._edible.update(self._space)
 
     def draw(self):
         """ 
         Draws the game to the default output 
         """
-        self._screen.fill(self.RED)
+        self._screen.fill(self.WHITE)
         self._draw_borders()
+
+        # TODO: DRAWING PART, TO BE REFACTORED!
+        for row in self._space:
+            for elm in row:
+                print (elm)
+        
         pygame.display.flip()
 
-    def _quantize_space(self, dimensions, quantum, border_width = 0):
-        # usable axis quanta => dimension[axis] - (border_width  * 2) / quantum
-        def get_range(axis):
-            return (axis - (border_width  * 2)) // quantum 
-        
-        space_range = get_range(dimensions[0]), get_range(dimensions[1])
-        return [[0] * (space_range[0]), [0] * (space_range[1])]
+    def _draw_space(self, space):
+
+        pass
 
     def _draw_borders(self):
         """ 
@@ -201,7 +263,7 @@ class SnakeGame():
             for event in pygame.event.get():
                 # Hardcore ciao event
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
-                    sys.exit()
+                    self._keep_running = False
 
                 # Tick
                 elif event.type == GAME_QUANTUM_EVENT:
@@ -224,6 +286,7 @@ class SnakeGame():
                         else:
                             print ("Invalid direction passed: ", str(proposed_direction))
                             
+        pygame.quit()
 
 
 # ----------------------------------------------------
