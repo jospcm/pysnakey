@@ -5,12 +5,13 @@ import numpy
 
 # CONFIGURATIONS
 SPACE_DIMENSIONS = (500, 500)
+SPACE_BORDER_WIDTH = 0
 SPACE_QUANTUM = 50
 SPACE_FPS = 20
 
 # Optional, only for PC, this is why we override the previous space definition
-SPACE_DIMENSIONS = (520, 520)
-SPACE_BORDER_WIDTH = 10
+#SPACE_DIMENSIONS = (520, 520)
+#SPACE_BORDER_WIDTH = 10
 
 # Affects the speed of the game
 GAME_DIFFICULTY = 10
@@ -184,8 +185,7 @@ class Space():
         return self._space.__next__()
 
 # ----------------------------------------------------
-class Snake():
-
+class Snake(Element):
     class Node():
         """
         Represents a part of the snake.
@@ -238,7 +238,7 @@ class Snake():
             raise ValueError("Invalid direction ({}) provided. Cannot proceed.".format(direction))
 
 # ----------------------------------------------------
-class Edible():
+class Edible(Element):
     def __init__(self, position = None):
         if position is None:
             raise ValueError("Invalid position provided to the delicious edible. Cannot proceed.")
@@ -312,7 +312,7 @@ class SnakeGame():
         # Snake expects a list of positions, even though the list is one.
         self._direction = KeyPress(KeyPress.DOWN)
         self._snake = Snake([[4, 0]], self._direction)
-        self._edible = Edible(self._space.get_random_unoccupied_position())
+        self._edible = Edible([1,0])
 
         # Engine specific code
         pygame.init()
@@ -439,13 +439,6 @@ class SnakeGame():
                 # Hardcore ciao event
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     self._keep_running = False
-
-                # TODO: JPM to remove this.
-                if (event.type == pygame.KEYDOWN and event.key == pygame.K_d):
-                    print ("DEBUG DEBUGDEBUGDEBUGDEBUG")
-                    #self._edible.set_position(self._space.get_random_unoccupied_position())
-                    #self._space.free((3,5))
-                    self.update()
 
                 # Tick
                 elif event.type == GAME_QUANTUM_EVENT:
