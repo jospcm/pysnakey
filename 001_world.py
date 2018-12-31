@@ -17,13 +17,12 @@ GAME_DIFFICULTY = 25
 GAME_QUANTUM = SPACE_FPS * GAME_DIFFICULTY
 GAME_QUANTUM_EVENT = pygame.USEREVENT
 
+# ----------------------------------------------------
 class KeyPress():
     LEFT, UP, RIGHT, DOWN = range(0, 4)
 
     def __init__(self, value = None):
-        if value not in range(0, 4):
-            raise ValueError("Invalid value provided for keypress" % value)
-        self.key = value
+        self.set(value)
 
     @staticmethod
     def random_key():
@@ -36,25 +35,40 @@ class KeyPress():
     def set(self, value):
         if not KeyPress.is_valid(value):
             raise ValueError("Invalid value provided for keypress" % str(value))
-        self.key = value 
+        self.value = value 
+
+    def __eq__(self, other):
+        """Overrides the default implementation"""
+        if isinstance(other, KeyPress):
+            return self.value == other.value
+        return False
 
     def __str__(self):
-        if self.key == self.LEFT:
+        if self.value == self.LEFT:
             return "left"
-        elif self.key == self.UP:
+        elif self.value == self.UP:
             return "up"
-        elif self.key == self.RIGHT:
+        elif self.value == self.RIGHT:
             return "right"
-        elif self.key == self.DOWN:
+        elif self.value == self.DOWN:
             return "down"
         else:
             raise ValueError()
         return ""
 
 # ----------------------------------------------------
+
+
+
+# ----------------------------------------------------
 class Snake():
+    _position = []
+
     def __init__(self):
-        self._position = []
+        pass
+
+    def grow(self):
+        pass
 
     def update(self):
         #print("- update: Snake")
@@ -62,8 +76,13 @@ class Snake():
 
 # ----------------------------------------------------
 class Edible():
-    def __init__(self):
-        self._position = []
+    _position = []
+
+    def __init__(self, position = None):
+        pass
+
+    def set_position(self, position):
+        print("Position given: ", position)
 
     def update(self):
         #print("- update: Edible")
@@ -71,7 +90,15 @@ class Edible():
 
 # ----------------------------------------------------
 class SnakeGame():
-    POSITIONAL_AXES = ((KeyPress.LEFT, KeyPress.RIGHT), (KeyPress.UP, KeyPress.DOWN))
+    """
+    Holds the logic of the game. Essentially controls how the parts fit together.
+
+    ... or should do so, at least.
+    """
+    POSITIONAL_AXES = ( (KeyPress(KeyPress.LEFT), KeyPress(KeyPress.RIGHT)), (KeyPress(KeyPress.UP), KeyPress(KeyPress.DOWN)) )
+    BLACK = (0, 0, 0)
+    WHITE = (255, 255, 255)
+    RED = (255, 0, 0)
 
     def __init__(self):
         self._snake = Snake()
@@ -98,23 +125,28 @@ class SnakeGame():
 
     def draw(self):
         """ Draws the game to the default output """
-        self._screen.fill((255,0,0))
+        self._screen.fill(self.RED)
         self._draw_borders()
         pygame.display.flip()
 
     def _draw_borders(self):
         """ Borders are nothing but a hollow rectangular shape encompassing the screen. """
-        pygame.draw.rect(self._screen, (0, 0, 0), (0, 0, SPACE_DIMENSIONS[0], SPACE_DIMENSIONS[1]), SPACE_BORDER_WIDTH)
+        pygame.draw.rect(self._screen, self.BLACK, (0, 0, SPACE_DIMENSIONS[0], SPACE_DIMENSIONS[1]), SPACE_BORDER_WIDTH)
 
     def _is_movement_valid(self, current_dir, proposed_dir):
         """ 
         Checks if the current movement respects the unbreakable laws of snake physics.
         It's assumed that both the current direction as well as the proposed direction as valid.
         """
-        print ("Direction", repr(current_dir))
-
-        current_axis = 0 if current_dir in self.POSITIONAL_AXES[0] else 1
-        print (current_axis)
+        current_axis = ('x' if current_dir in self.POSITIONAL_AXES[0] else 'y')
+        proposed_axis = ('x' if proposed_dir in self.POSITIONAL_AXES[0] else 'y')
+        
+        # If the current direction differs from the proposed one, and they belong to the same axis, then 
+        # the change is invalid, otherwise it's all fine.
+        if current_dir != proposed_dir:
+            return current_axis != proposed_axis
+        else:
+            return True
 
     def _parse_key_press(self, pygame_key):
         if pygame_key == pygame.K_LEFT:
@@ -131,6 +163,7 @@ class SnakeGame():
 
     def run(self):
         # First run:
+        print(self._direction)
         self.update()
         self.draw()
 
@@ -154,10 +187,16 @@ class SnakeGame():
                     current_direction = self._direction
                     parsed_key = self._parse_key_press(event.key)
                     if KeyPress.is_valid(parsed_key):
-                        self._direction.set(parsed_key)
-
+                        proposed_direction = KeyPress(parsed_key)
+                        
                         # Check if change of movement is valid
-                        self._is_movement_valid(current_direction, self._direction)
+                        valid_movement = self._is_movement_valid(current_direction, proposed_direction)
+                        if valid_movement:
+                            self._direction.set(parsed_key)
+                            print("+ direction:", str(proposed_direction))
+                        else:
+                            print ("Invalid direction passed: ", str(proposed_direction))
+                            
 
 
 # ----------------------------------------------------
