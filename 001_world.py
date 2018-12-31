@@ -13,9 +13,22 @@ SPACE_DIMENSIONS = (520, 520)
 SPACE_BORDER_WIDTH = 10
 
 # Affects the speed of the game
-GAME_DIFFICULTY = 25
+GAME_DIFFICULTY = 10
 GAME_QUANTUM = SPACE_FPS * GAME_DIFFICULTY
 GAME_QUANTUM_EVENT = pygame.USEREVENT
+
+# ----------------------------------------------------
+class GameOver(BaseException):
+    def __init__(self, str, *args, **kwargs):
+        print(str)
+
+class InvalidPositionGameOver(GameOver):
+    def __init__(self, str, *args, **kwargs):
+        super(InvalidPositionGameOver, self).__init__(args, kwargs)
+
+class AteItselfGameOver(GameOver):
+    def __init__(self, str, *args, **kwargs):
+        super(AteItselfGameOver, self).__init__(args, kwargs)
 
 # ----------------------------------------------------
 class KeyPress():
@@ -68,6 +81,7 @@ class Element():
             raise ValueError("Invalid argument provided for the element representation")
         self._repr = representation
 
+# ----------------------------------------------------
 class EmptyElement(Element):
     def __init__(self):
         super(EmptyElement, self).__init__(0)
@@ -90,16 +104,38 @@ class Space():
                     free.append([x,y])
         return random.choice(free)
 
+    def is_valid(self, position):
+        x, y = position        
+        return (0 <= x < len(self._space)) and (0 <= y < len(self._space[0]))
 
     def occupy(self, position, value):
         x, y = position
-        self._space[x][y] = value
+        if self.is_valid(position):
+            self._space[x][y] = value
+        else:
+            raise ValueError("Invalid position passed to occupy. Giving up.")
 
     def free(self, position):
         x, y = position
         elm  = self._space[x][y]
         self._space[x][y] = EmptyElement()
-    
+
+    def is_occupied(self, position):
+        if self.is_valid(position):
+            x, y = position
+            return self._space[x][y] != EmptyElement()
+        else:
+            raise ValueError("Invalid position provided. Giving up.")
+
+    def is_of_type(self, position, which_type):
+        """ 
+        Returns true if element at the specified position is of the given type
+        """
+        if self.is_valid(position):
+            x, y = position
+            return isinstance(self._space[x][y], which_type)
+        return False
+
     def contains(self, who):
         """
         Returns true if the element is already present in our universe
@@ -116,7 +152,6 @@ class Space():
 
         return position
 
-
     def _quantize(self, dimensions, quantum, border_width):
         # usable axis quanta => dimension[axis] - (border_width  * 2) / quantum
         def get_range(axis):
@@ -125,22 +160,22 @@ class Space():
         space_range = get_range(dimensions[0]), get_range(dimensions[1])
         return numpy.full(space_range, EmptyElement())
 
-    # Python magic
-    # def __setitem__(self, key, value):
-    #     try:
-    #         x, y = key
-    #         self._space[x][y] = value
-    #     except Exception as e:
-    #         # Bad.
-    #         raise ValueError("Cannot set space item. Invalid key provided. Expected: sequence with 2+ elements.")
+    #Python magic
+    def __setitem__(self, key, value):
+        try:
+            x, y = key
+            self._space[x][y] = value
+        except Exception as e:
+            # Bad.
+            raise ValueError("Cannot set space item. Invalid key provided. Expected: sequence with 2+ elements.")
 
-    # def __getitem__(self, key):
-    #     try:
-    #         x, y = key
-    #         return self._space[x][y]
-    #     except Exception as e:
-    #         # Bad.
-    #         raise ValueError("Cannot retrieve space item. Invalid key provided. Expected: sequence with 2+ elements.")
+    def __getitem__(self, key):
+        try:
+            x, y = key
+            return self._space[x][y]
+        except Exception as e:
+            # Bad.
+            raise ValueError("Cannot retrieve space item. Invalid key provided. Expected: sequence with 2+ elements.")
 
     def __iter__(self):
         return self._space.__iter__()
@@ -153,11 +188,10 @@ class Snake():
 
     class Node():
         """
-        Represents a part of the snake, contains a position and an associated velocity.
+        Represents a part of the snake.
         """
-        def __init__(self, position, velocity):
+        def __init__(self, position):
             self._position = position
-            self._velocity = velocity
 
     def __init__(self, position = None, direction = None):
         if position is None:
@@ -168,28 +202,29 @@ class Snake():
         
         self._nodes = []
         for pos in position:
-            self._nodes.append(Snake.Node(pos, self._derive_vector(direction)))
+            self._nodes.append(Snake.Node(pos))
 
         self._direction = direction
         pass
 
-    def update(self, space, direction):
+    def update(self, game, direction):
         # Updating the snake is essentially creating a new node, and destroying the last one.
-
         new_velocity = self._derive_vector(direction)
         new_position = list(numpy.add(new_velocity, self._nodes[-1]._position))
         
-        self._nodes.append(Snake.Node(new_position, new_velocity))
+        should_grow = game.should_grow(new_position)
+        self._nodes.append(Snake.Node(new_position))
 
-        # Delete the last one
-        last = self._nodes.pop(0)
-        
-        # Free the last position
-        space.free(last._position)
+        # Delete the last one, unless we have to grow.
+        if not should_grow:
+            last = self._nodes.pop(0)
+            
+            # Free the last position, so it can be redrawn
+            game.free(last._position)
         
         for pos in self._nodes:
-            space.occupy(pos._position, self)
-        
+            game.occupy(pos._position, self)
+
     def _derive_vector(self, direction):
         if (direction == KeyPress.LEFT):
             return (-1, 0)
@@ -208,13 +243,17 @@ class Edible():
         if position is None:
             raise ValueError("Invalid position provided to the delicious edible. Cannot proceed.")
         self._position = position
+        self._new_position = position
         pass
 
     def set_position(self, position):
-        self._position = position
+        self._new_position = position
 
-    def update(self, space):
-        space.occupy(self._position, self)
+    def update(self, game):
+        if self._position != self._new_position:
+            self._position = self._new_position
+
+        game.occupy(self._position, self)
         pass
 
 # ----------------------------------------------------
@@ -233,18 +272,46 @@ class SnakeGame():
     RED = (128, 0, 0)
     GREEN = (0, 128, 0)
 
+    class Logic:
+        def __init__(self, space):
+            self._space = space
+
+        def should_grow(self, potential_position):
+            if not self._space.is_valid(potential_position):
+                raise InvalidPositionGameOver("The snake has hit a wall! Game Over!")
+            
+            # If space is not occupied, it's all fine.
+            if not self._space.is_occupied(potential_position):
+                return False
+
+            # It seems that the snake has eaten itself!
+            if self._space.is_of_type(potential_position, Snake):
+                raise AteItselfGameOver("The snake has eaten itself! Game Over!")
+
+            # Space seems to be occupied, so it's either by the snake (game over) or by an edible
+            if self._space.is_of_type(potential_position, Edible):
+                self._space[potential_position].set_position(self._space.get_random_unoccupied_position())
+                return True
+
+            return False
+        
+        def occupy(self, position, who):
+            self._space.occupy(position, who)
+        
+        def free(self, position):
+            self._space.free(position)
+    
     def __init__(self):
         # A snapshot of our snakey universe.
-        self._space = Space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)        
+        self._space = Space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)
+        self._game = SnakeGame.Logic(self._space)
 
         # Movement
-        self._direction = KeyPress(KeyPress.random_key())
-
-        # TODO: JPM DEBUGGING
+        self._pressed_key = None
+        
         # Snake expects a list of positions, even though the list is one.
         self._direction = KeyPress(KeyPress.DOWN)
-        self._snake = Snake([[4, 0], [4, 1], [4, 2]], self._direction)
-        # self._snake = Snake([self._space.get_random_unoccupied_position()], self._direction)
+        self._snake = Snake([[4, 0]], self._direction)
         self._edible = Edible(self._space.get_random_unoccupied_position())
 
         # Engine specific code
@@ -258,12 +325,29 @@ class SnakeGame():
         # TODO: DRAWING PART, TO BE REFACTORED!
         self._screen = pygame.display.set_mode(SPACE_DIMENSIONS)
 
+    def update_position(self):
+        current_direction = self._direction
+        proposed_direction = self._pressed_key
+
+        # Check if change of movement is valid
+        if proposed_direction is not None:
+            valid_movement = self._is_movement_valid(current_direction, proposed_direction)
+            if valid_movement:
+                self._direction.set(self._pressed_key)
+                print("+ direction:", str(proposed_direction))
+            else:
+                print ("Invalid direction passed: ", str(proposed_direction))
+
     def update(self):
         """ 
         Updates the internal state of the game 
         """
-        self._snake.update(self._space, self._direction)
-        self._edible.update(self._space)
+        try:
+            self._snake.update(self._game, self._direction)
+        except GameOver as e:
+            print(e)
+
+        self._edible.update(self._game)
 
     def draw(self):
         """ 
@@ -296,8 +380,8 @@ class SnakeGame():
                     position = self._translate_coords(x, y)
                     pygame.draw.rect(self._screen, self.GREEN, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
 
-                    # Shouldn't happen.
                 else:
+                    # Shouldn't happen.
                     print ("- BAD: ({},{}) -> {}".format(x, y, elm))
 
     # TODO: TO BE REFACTORED
@@ -343,6 +427,7 @@ class SnakeGame():
     def run(self):
         # First run:
         print(self._direction)
+        
         self.update()
         self.draw()
 
@@ -364,25 +449,22 @@ class SnakeGame():
 
                 # Tick
                 elif event.type == GAME_QUANTUM_EVENT:
-                    # self.update()
+                    self.update_position()
+                    self.update()
                     self.draw()
 
-                # Keypress
                 elif event.type == pygame.KEYDOWN:
                     # Cache the previous movement in case the change is not valid.
-                    current_direction = self._direction
                     parsed_key = self._parse_key_press(event.key)
                     if KeyPress.is_valid(parsed_key):
-                        proposed_direction = KeyPress(parsed_key)
+                        self._pressed_key = KeyPress(parsed_key)
                         
-                        # Check if change of movement is valid
-                        valid_movement = self._is_movement_valid(current_direction, proposed_direction)
-                        if valid_movement:
-                            self._direction.set(parsed_key)
-                            print("+ direction:", str(proposed_direction))
-                        else:
-                            print ("Invalid direction passed: ", str(proposed_direction))
-
+                        current_direction = self._direction
+                        proposed_direction = self._pressed_key
+                        
+                        print("+ proposed direction:", str(proposed_direction))
+    
+                        
         # Out of the loop.                    
         pygame.quit()
 
