@@ -41,6 +41,11 @@ class KeyPress():
         """Overrides the default implementation"""
         if isinstance(other, KeyPress):
             return self.value == other.value
+
+        # Try comparing to our representation
+        elif isinstance(other, int):
+            if KeyPress.is_valid(other):
+                return self.value == other
         return False
 
     def __str__(self):
@@ -79,10 +84,10 @@ class Space():
     
     def get_random_unoccupied_position(self):
         free = []
-        for y, row in enumerate(self._space):
-            for x, elm in enumerate(row):
+        for x, row in enumerate(self._space):
+            for y, elm in enumerate(row):
                 if isinstance(elm, EmptyElement):
-                    free.append((x,y))
+                    free.append([x,y])
         return random.choice(free)
 
 
@@ -92,7 +97,25 @@ class Space():
 
     def free(self, position):
         x, y = position
+        elm  = self._space[x][y]
         self._space[x][y] = EmptyElement()
+    
+    def contains(self, who):
+        """
+        Returns true if the element is already present in our universe
+        """
+        return numpy.isin(who, self._space)
+
+    def where(self, who):
+        """
+        Returns the position of the element, assuming it's already present in our universe. 
+        """
+        position = numpy.where(self._space == who)
+        if (position):
+            position = position[0][0], position[1][0]
+
+        return position
+
 
     def _quantize(self, dimensions, quantum, border_width):
         # usable axis quanta => dimension[axis] - (border_width  * 2) / quantum
@@ -127,29 +150,68 @@ class Space():
 
 # ----------------------------------------------------
 class Snake():
-    _position = []
-    def __init__(self, position = None):
+
+    class Node():
+        """
+        Represents a part of the snake, contains a position and an associated velocity.
+        """
+        def __init__(self, position, velocity):
+            self._position = position
+            self._velocity = velocity
+
+    def __init__(self, position = None, direction = None):
         if position is None:
             raise ValueError("Invalid initial provided to the mighty snake. Cannot proceed.")
-        self._position = [position]
+
+        if direction is None:
+            raise ValueError("Invalid initial vector to the mighty snake. Cannot proceed.")
+        
+        self._nodes = []
+        for pos in position:
+            self._nodes.append(Snake.Node(pos, self._derive_vector(direction)))
+
+        self._direction = direction
         pass
 
-    def update(self, space):
-        for pos in self._position:
-            space.occupy(pos, self)
+    def update(self, space, direction):
+        # Updating the snake is essentially creating a new node, and destroying the last one.
+
+        new_velocity = self._derive_vector(direction)
+        new_position = list(numpy.add(new_velocity, self._nodes[-1]._position))
+        
+        self._nodes.append(Snake.Node(new_position, new_velocity))
+
+        # Delete the last one
+        last = self._nodes.pop(0)
+        
+        # Free the last position
+        space.free(last._position)
+        
+        for pos in self._nodes:
+            space.occupy(pos._position, self)
+        
+    def _derive_vector(self, direction):
+        if (direction == KeyPress.LEFT):
+            return (-1, 0)
+        elif (direction == KeyPress.UP):
+            return (0, -1)
+        elif (direction == KeyPress.RIGHT):
+            return (1, 0)
+        elif (direction == KeyPress.DOWN):
+            return (0, 1)
+        else:
+            raise ValueError("Invalid direction ({}) provided. Cannot proceed.".format(direction))
 
 # ----------------------------------------------------
 class Edible():
-    _position = []
-
     def __init__(self, position = None):
         if position is None:
             raise ValueError("Invalid position provided to the delicious edible. Cannot proceed.")
         self._position = position
         pass
 
-    # def set_position(self, position):
-    #     print("Position given: ", position)
+    def set_position(self, position):
+        self._position = position
 
     def update(self, space):
         space.occupy(self._position, self)
@@ -159,10 +221,9 @@ class Edible():
 class SnakeGame():
     """
     Holds the logic of the game. Essentially controls how the parts fit together.
-
+ 
     This assumes that any entity occupies a single pixel on the screen, and leaves the overhead of the rendering
     to the responsible module. Or it will do that, at some point.
-    
     """
     POSITIONAL_AXES = ( (KeyPress(KeyPress.LEFT), KeyPress(KeyPress.RIGHT)), (KeyPress(KeyPress.UP), KeyPress(KeyPress.DOWN)) )
 
@@ -175,12 +236,16 @@ class SnakeGame():
     def __init__(self):
         # A snapshot of our snakey universe.
         self._space = Space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)        
-        # 
-        self._snake = Snake(self._space.get_random_unoccupied_position())
-        self._edible = Edible(self._space.get_random_unoccupied_position())
 
         # Movement
         self._direction = KeyPress(KeyPress.random_key())
+
+        # TODO: JPM DEBUGGING
+        # Snake expects a list of positions, even though the list is one.
+        self._direction = KeyPress(KeyPress.DOWN)
+        self._snake = Snake([[4, 0], [4, 1], [4, 2]], self._direction)
+        # self._snake = Snake([self._space.get_random_unoccupied_position()], self._direction)
+        self._edible = Edible(self._space.get_random_unoccupied_position())
 
         # Engine specific code
         pygame.init()
@@ -197,7 +262,7 @@ class SnakeGame():
         """ 
         Updates the internal state of the game 
         """
-        self._snake.update(self._space)
+        self._snake.update(self._space, self._direction)
         self._edible.update(self._space)
 
     def draw(self):
@@ -216,9 +281,9 @@ class SnakeGame():
         """ 
         # TODO: DRAWING PART, TO BE REFACTORED! 
         # """
-        for y, row in enumerate(self._space):
+        for x, row in enumerate(self._space):
             # Take offset into account in this hack
-            for x, elm in enumerate(row):
+            for y, elm in enumerate(row):
                 if isinstance(elm, EmptyElement):
                     position = self._translate_coords(x, y)
                     pygame.draw.rect(self._screen, self.WHITE, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
@@ -241,7 +306,6 @@ class SnakeGame():
         Translates our cartesian representation to the coordinate sytem understood by pygame
         """
         return SPACE_BORDER_WIDTH + (x * SPACE_QUANTUM), SPACE_BORDER_WIDTH + (y * SPACE_QUANTUM)
-
 
     def _draw_borders(self):
         """ 
@@ -294,11 +358,13 @@ class SnakeGame():
                 # TODO: JPM to remove this.
                 if (event.type == pygame.KEYDOWN and event.key == pygame.K_d):
                     print ("DEBUG DEBUGDEBUGDEBUGDEBUG")
-                    self._edible = Edible(self._space.get_random_unoccupied_position())
+                    #self._edible.set_position(self._space.get_random_unoccupied_position())
+                    #self._space.free((3,5))
+                    self.update()
 
                 # Tick
                 elif event.type == GAME_QUANTUM_EVENT:
-                    self.update()
+                    # self.update()
                     self.draw()
 
                 # Keypress
