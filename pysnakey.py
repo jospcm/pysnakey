@@ -4,9 +4,9 @@ import random
 import numpy
 
 # UI
-from time import sleep
-from aurabox import *
-from bluetooth import find_service, BluetoothSocket, RFCOMM
+# from time import sleep
+# from aurabox import *
+# from bluetooth import find_service, BluetoothSocket, RFCOMM
 
 # Optional, only for PC, this is why we override the previous space definition
 SPACE_DIMENSIONS = (520, 520)
@@ -311,6 +311,7 @@ class SnakeUI():
         """
         return SPACE_BORDER_WIDTH + (x * SPACE_QUANTUM), SPACE_BORDER_WIDTH + (y * SPACE_QUANTUM)
 
+
 class AuraboxUI():
     # Empirically determined those values to be from 0 to 7.
     BLACK, RED, GREEN, YELLOW, DARK_BLUE, PURPLE, LIGHT_BLUE, WHITE = range(8)
@@ -595,7 +596,7 @@ class SnakeGame():
 
 # ----------------------------------------------------
 if __name__ == "__main__":
-    aura_ui = AuraboxUI("11:75:58:92:3E:FF")
+    # aura_ui = AuraboxUI("11:75:58:92:3E:FF")
     game = SnakeGame(SnakeUI())
-    game.add_ui(aura_ui)
+    # game.add_ui(aura_ui)
     game.run()
