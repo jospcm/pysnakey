@@ -3,15 +3,11 @@ import pygame
 import random
 import numpy
 
-# CONFIGURATIONS
-SPACE_DIMENSIONS = (500, 500)
-SPACE_BORDER_WIDTH = 0
+# Optional, only for PC, this is why we override the previous space definition
+SPACE_DIMENSIONS = (520, 520)
+SPACE_BORDER_WIDTH = 10
 SPACE_QUANTUM = 50
 SPACE_FPS = 20
-
-# Optional, only for PC, this is why we override the previous space definition
-#SPACE_DIMENSIONS = (520, 520)
-#SPACE_BORDER_WIDTH = 10
 
 # Affects the speed of the game
 GAME_DIFFICULTY = 10
@@ -346,6 +342,7 @@ class SnakeGame():
             self._snake.update(self._game, self._direction)
         except GameOver as e:
             print(e)
+            self._keep_running = False
 
         self._edible.update(self._game)
 
