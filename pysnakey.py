@@ -157,7 +157,6 @@ class Space():
         space_range = get_range(dimensions[0]), get_range(dimensions[1])
         return numpy.full(space_range, EmptyElement())
 
-    #Python magic
     def __setitem__(self, key, value):
         try:
             x, y = key
@@ -253,6 +252,61 @@ class Edible(Element):
         pass
 
 # ----------------------------------------------------
+class SnakeUI():
+    BLACK = (0, 0, 0)
+    WHITE = (255, 255, 255)
+    RED = (128, 0, 0)
+    GREEN = (0, 128, 0)
+
+    def __init__(self):
+        self._screen = pygame.display.set_mode(SPACE_DIMENSIONS)
+        pass
+
+    def draw(self, space):
+        self._screen.fill(SnakeUI.BLACK)
+        self._draw_borders()
+
+        # Effectively draws the game.
+        self._draw_space(space)
+        
+        pygame.display.flip()
+
+    def _draw_space(self, space):
+        """ 
+        # TODO: DRAWING PART, TO BE REFACTORED! 
+        # """
+        for x, row in enumerate(space):
+            # Take offset into account in this hack
+            for y, elm in enumerate(row):
+                if isinstance(elm, EmptyElement):
+                    position = self._translate_coords(x, y)
+                    pygame.draw.rect(self._screen, SnakeUI.WHITE, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
+
+                elif isinstance(elm, Edible):
+                    position = self._translate_coords(x, y)
+                    pygame.draw.rect(self._screen, SnakeUI.RED, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
+
+                elif isinstance(elm, Snake):
+                    position = self._translate_coords(x, y)
+                    pygame.draw.rect(self._screen, SnakeUI.GREEN, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
+
+                else:
+                    # Shouldn't happen.
+                    print ("- BAD: ({},{}) -> {}".format(x, y, elm))
+
+    def _draw_borders(self):
+        """ 
+        Borders are nothing but a hollow rectangular shape encompassing the screen. 
+        """
+        pygame.draw.rect(self._screen, SnakeUI.BLACK, (0, 0, SPACE_DIMENSIONS[0], SPACE_DIMENSIONS[1]), SPACE_BORDER_WIDTH)
+
+    def _translate_coords(self, x, y):
+        """ 
+        Translates our cartesian representation to the coordinate sytem understood by pygame
+        """
+        return SPACE_BORDER_WIDTH + (x * SPACE_QUANTUM), SPACE_BORDER_WIDTH + (y * SPACE_QUANTUM)
+
+# ----------------------------------------------------
 class SnakeGame():
     """
     Holds the logic of the game. Essentially controls how the parts fit together.
@@ -261,12 +315,6 @@ class SnakeGame():
     to the responsible module. Or it will do that, at some point.
     """
     POSITIONAL_AXES = ( (KeyPress(KeyPress.LEFT), KeyPress(KeyPress.RIGHT)), (KeyPress(KeyPress.UP), KeyPress(KeyPress.DOWN)) )
-
-    # TODO: DRAWING PART, TO BE REFACTORED!
-    BLACK = (0, 0, 0)
-    WHITE = (255, 255, 255)
-    RED = (128, 0, 0)
-    GREEN = (0, 128, 0)
 
     class Logic:
         def __init__(self, space):
@@ -297,7 +345,7 @@ class SnakeGame():
         def free(self, position):
             self._space.free(position)
     
-    def __init__(self):
+    def __init__(self, ui):
         # A snapshot of our snakey universe.
         self._space = Space(SPACE_DIMENSIONS, SPACE_QUANTUM, SPACE_BORDER_WIDTH)
         self._game = SnakeGame.Logic(self._space)
@@ -317,9 +365,7 @@ class SnakeGame():
 
         # Indicate when to quit
         self._keep_running = True
-
-        # TODO: DRAWING PART, TO BE REFACTORED!
-        self._screen = pygame.display.set_mode(SPACE_DIMENSIONS)
+        self._ui = ui
 
     def update_position(self):
         current_direction = self._direction
@@ -341,59 +387,20 @@ class SnakeGame():
         try:
             self._snake.update(self._game, self._direction)
         except GameOver as e:
+            print ("You've died!")
             print(e)
             self._keep_running = False
 
         self._edible.update(self._game)
 
+    # ----------------- DRAWING BELOW
     def draw(self):
         """ 
         Draws the game to the default output 
         """
-        self._screen.fill(self.WHITE)
-        self._draw_borders()
+        self._ui.draw(self._space)
 
-        # TODO: DRAWING PART, TO BE REFACTORED! 
-        self._draw_space(self._space)
-        
-        pygame.display.flip()
-
-    def _draw_space(self, space):
-        """ 
-        # TODO: DRAWING PART, TO BE REFACTORED! 
-        # """
-        for x, row in enumerate(self._space):
-            # Take offset into account in this hack
-            for y, elm in enumerate(row):
-                if isinstance(elm, EmptyElement):
-                    position = self._translate_coords(x, y)
-                    pygame.draw.rect(self._screen, self.WHITE, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
-
-                elif isinstance(elm, Edible):
-                    position = self._translate_coords(x, y)
-                    pygame.draw.rect(self._screen, self.RED, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
-
-                elif isinstance(elm, Snake):
-                    position = self._translate_coords(x, y)
-                    pygame.draw.rect(self._screen, self.GREEN, (position[0], position[1], SPACE_QUANTUM, SPACE_QUANTUM))
-
-                else:
-                    # Shouldn't happen.
-                    print ("- BAD: ({},{}) -> {}".format(x, y, elm))
-
-    # TODO: TO BE REFACTORED
-    def _translate_coords(self, x, y):
-        """ 
-        Translates our cartesian representation to the coordinate sytem understood by pygame
-        """
-        return SPACE_BORDER_WIDTH + (x * SPACE_QUANTUM), SPACE_BORDER_WIDTH + (y * SPACE_QUANTUM)
-
-    def _draw_borders(self):
-        """ 
-        Borders are nothing but a hollow rectangular shape encompassing the screen. 
-        """
-        pygame.draw.rect(self._screen, self.BLACK, (0, 0, SPACE_DIMENSIONS[0], SPACE_DIMENSIONS[1]), SPACE_BORDER_WIDTH)
-
+    # ----------------- DRAWING ABOVE.
     def _is_movement_valid(self, current_dir, proposed_dir):
         """ 
         Checks if the current movement respects the unbreakable laws of snake physics.
@@ -458,8 +465,7 @@ class SnakeGame():
         # Out of the loop.                    
         pygame.quit()
 
-
 # ----------------------------------------------------
 if __name__ == "__main__":
-    game = SnakeGame()
+    game = SnakeGame(SnakeUI())
     game.run()
